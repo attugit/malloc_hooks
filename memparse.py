@@ -56,7 +56,7 @@ def parse(lines):
                 for symbol, size in allocs[ptr]:
                     symbols[symbol].append(-size)
             except KeyError as e:
-                print(e)
+                pass
     return symbols
 
 
@@ -74,9 +74,9 @@ def analyze(symbols):
 
 indata = args.input if args.input is not None else sys.stdin
 output = args.output if args.output is not None else sys.stdout
-direction = 1 if args.ascending else -1
+direction = False if args.ascending else True
 
 symbols = parse(indata.readlines())
 items = analyze(symbols)
-items = sorted(items, key=lambda x: direction * x[args.sortby])[:args.number]
-output.write(json.dumps(items, sort_keys=True, indent=2) + '\n')
+items.sort(key=lambda x: x[args.sortby], reverse=direction)
+output.write(json.dumps(items[:args.number], sort_keys=True, indent=2) + '\n')
