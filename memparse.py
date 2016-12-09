@@ -3,6 +3,7 @@
 import re
 import sys
 import json
+import weakref
 import argparse
 
 frame = re.compile(
@@ -21,6 +22,7 @@ parser.add_argument(
         'atexit',
         'count',
         'sum',
+        'symbol',
         'peak',
         'max'],
     default='peak')
@@ -31,11 +33,32 @@ group.add_argument('-d', '--descending', action='store_false')
 args = parser.parse_args()
 
 
+class proxy_list(list):
+    pass
+
+
 def partial_sum(iterable):
     total = 0
     for x in iterable:
         total += x
         yield total
+
+
+def handleMalloc(symbols, allocs, ptr, size, idx, symbol):
+    size = int(size)
+    symbols.setdefault(symbol, proxy_list()).append(size)
+    allocs.setdefault(
+        ptr, (size, []))[1].append(
+        weakref.proxy(symbols[symbol]))
+
+
+def handleFree(allocs, ptr):
+    try:
+        size, proxies = allocs[ptr]
+        for p in proxies:
+            p.append(-size)
+    except KeyError as e:
+        pass
 
 
 def parse(lines):
@@ -44,20 +67,12 @@ def parse(lines):
     for ex in lines:
         result = frame.match(ex)
         if result:
-            ptr, size, idx, symbol = result.groups()
-            size = int(size)
-            symbols.setdefault(symbol, []).append(size)
-            allocs.setdefault(ptr, []).append((symbol, size))
+            handleMalloc(symbols, allocs, *result.groups())
             continue
         result = free.match(ex)
         if result:
-            ptr = result.groups()[0]
-            try:
-                for symbol, size in allocs[ptr]:
-                    symbols[symbol].append(-size)
-            except KeyError as e:
-                pass
-    return symbols
+            handleFree(allocs, *result.groups())
+        return symbols
 
 
 def analyze(symbols):
